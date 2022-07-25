@@ -29,6 +29,9 @@ namespace VideoAudioMerge
 
         Properties.Settings Settings = Properties.Settings.Default;
 
+        string[] AllowedAudioFormats = { "mp3", "m4a" };
+        string[] AllowedVideoFormats = { "mp4" };
+
         public VideoAudioMerge()
         {
             InitializeComponent();
@@ -297,7 +300,7 @@ namespace VideoAudioMerge
 
             files = files
                 .Where(str => !string.IsNullOrEmpty(str) && File.Exists(str))
-                .Where(str => fileFmt.Length == 0|| fileFmt.Any(fmt => str.EndsWith(fmt, StringComparison.OrdinalIgnoreCase)))
+                .Where(str => fileFmt.Length == 0 || fileFmt.Any(fmt => string.Equals(Path.GetExtension(str).TrimStart('.'), fmt.TrimStart('.'), StringComparison.OrdinalIgnoreCase)))
                 .ToArray();
 
             return files;
@@ -325,11 +328,19 @@ namespace VideoAudioMerge
             }
         }
 
+        private static string GetFilter(IEnumerable<string> formats, string allFormatsName)
+        {
+            string audioFilesFilter = $"{allFormatsName}|{string.Join(";", formats.Select(fmt => $"*.{fmt.TrimStart('.').ToLower()}"))}";
+            string fmtFilter = string.Join("|", formats.Select(fmt => $"{fmt.TrimStart('.').ToUpper()} Files|*.{fmt.TrimStart('.').ToLower()}"));
+            string filter = $"{audioFilesFilter}|{fmtFilter}|All files|*.*";
+            return filter;
+        }
+
         private void btnBrowseVideoIn_Click(object sender, EventArgs e)
         {
             OpenFileDialog openFileDialog = new OpenFileDialog();
 
-            openFileDialog.Filter = "MP4 Files | *.mp4";
+            openFileDialog.Filter = GetFilter(AllowedVideoFormats, "Video Files");
 
             if (Directory.Exists(Settings.BrowseVideoInParentDirectory))
                 openFileDialog.InitialDirectory = Settings.BrowseVideoInParentDirectory;
@@ -343,8 +354,7 @@ namespace VideoAudioMerge
         private void btnBrowseAudioIn_Click(object sender, EventArgs e)
         {
             OpenFileDialog openFileDialog = new OpenFileDialog();
-
-            openFileDialog.Filter = "MP3 Files | *.mp3";
+            openFileDialog.Filter = GetFilter(AllowedAudioFormats, "Audio Files");
 
             if (Directory.Exists(Settings.BrowseAudioInParentDirectory))
                 openFileDialog.InitialDirectory = Settings.BrowseAudioInParentDirectory;
@@ -412,8 +422,8 @@ namespace VideoAudioMerge
             if (AppState == AppState.Idle)
             {
                 string[] files = GetFilesOnlyFromData(e.Data);
-                string[] videoFiles = GetFilesOnlyFromData(e.Data, ".mp4");
-                string[] audioFiles = GetFilesOnlyFromData(e.Data, ".mp3");
+                string[] videoFiles = GetFilesOnlyFromData(e.Data, AllowedVideoFormats);
+                string[] audioFiles = GetFilesOnlyFromData(e.Data, AllowedAudioFormats);
 
                 if (videoFiles.Length > 0 && audioFiles.Length > 0)
                 {
@@ -445,8 +455,8 @@ namespace VideoAudioMerge
 
         private void TxtOutput_DragEnter(object sender, DragEventArgs e)
         {
-            string[] videoFiles = GetFilesOnlyFromData(e.Data, ".mp4");
-            string[] audioFiles = GetFilesOnlyFromData(e.Data, ".mp3");
+            string[] videoFiles = GetFilesOnlyFromData(e.Data, AllowedVideoFormats);
+            string[] audioFiles = GetFilesOnlyFromData(e.Data, AllowedAudioFormats);
 
             if (videoFiles.Length > 0 && audioFiles.Length > 0)
             {
@@ -462,8 +472,8 @@ namespace VideoAudioMerge
         {
             if (AppState == AppState.Idle)
             {
-                string[] videoFiles = GetFilesOnlyFromData(e.Data, ".mp4");
-                string[] audioFiles = GetFilesOnlyFromData(e.Data, ".mp3");
+                string[] videoFiles = GetFilesOnlyFromData(e.Data, AllowedVideoFormats);
+                string[] audioFiles = GetFilesOnlyFromData(e.Data, AllowedAudioFormats);
 
                 if (videoFiles.Length > 0 && audioFiles.Length > 0)
                 {
