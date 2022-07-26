@@ -107,6 +107,7 @@ namespace VideoAudioMerge
             AppState = AppState.Buisy;
 
             CanellMergeTask = new CancellationTokenSource();
+            
             MergeTask = Task.Factory.StartNew((() =>
             {
                 try
@@ -120,13 +121,12 @@ namespace VideoAudioMerge
                     string fileNameVideoOut = string.Format("{0}\\{1} out{2}", path, fileName, ext);
 
                     int i = 0;
-                    while(File.Exists(fileNameVideoOut))
+                    while (File.Exists(fileNameVideoOut))
                     {
                         i++;
                         fileNameVideoOut = string.Format("{0}\\{1} out({2}){3}", path, fileName, i, ext);
                     }
 
-                    
                     //string procFileName = "cmd";
                     //string args = "/C \"echo y | ffmpeg -i \"video.mp4\" -i \"audio.mp3\" -map 0:v -map 1:a -codec copy -shortest \"out.mp4\"\"";
 
@@ -139,19 +139,41 @@ namespace VideoAudioMerge
 
                     ffmpegProc.StartInfo.FileName = procFileName;
                     ffmpegProc.StartInfo.Arguments = args;
+                    ffmpegProc.StartInfo.CreateNoWindow = true;
+                    ffmpegProc.StartInfo.UseShellExecute = false;
 
-                    //proc.StartInfo.RedirectStandardOutput = true;
-                    //proc.StartInfo.RedirectStandardError = true;
-                    //proc.StartInfo.UseShellExecute = false;
-                    //proc.StartInfo.CreateNoWindow = false;
+                    ffmpegProc.StartInfo.RedirectStandardOutput = true;
+                    ffmpegProc.StartInfo.RedirectStandardError = true;
 
                     ffmpegProc.Start();
 
-                    //string output = proc.StandardOutput.ReadToEnd();
-                    //string error = proc.StandardError.ReadToEnd();
+                    while (!ffmpegProc.HasExited)
+                    {
+                        try
+                        {
+                            // Print the output progress.
+                            // The output is sent to the StandardError stream, not the StandardOutput.
+                            string str = ffmpegProc.StandardError.ReadLine();
+                            if (str.StartsWith("frame="))
+                            {
+                                this.BeginInvoke(() =>
+                                {
+                                    txtOutput.Text = "FFmpeg output:\r\n" + str;
+                                });
+                            }
+                        }
+                        catch 
+                        {
+                            // If process exited, an error can occur while reading output.
+                            // In such a case, ignore the error.
+                            if(!ffmpegProc.HasExited)
+                            {
+                                throw;
+                            }
+                        }
+                    }
 
                     ffmpegProc.WaitForExit();
-
                     ffmpegProc.Dispose();
 
                     this.BeginInvoke(() =>
@@ -164,7 +186,7 @@ namespace VideoAudioMerge
                             textVideoOut.SelectionLength = txtAudioIn.Text.Length;
                             textVideoOut.ForeColor = Color.Blue;
                             fileSystemWatcher1.Path = Path.GetDirectoryName(fileNameVideoOut);
-                            fileSystemWatcher1.EnableRaisingEvents = true;   
+                            fileSystemWatcher1.EnableRaisingEvents = true;
                         }
                     });
                 }
@@ -197,7 +219,7 @@ namespace VideoAudioMerge
                         SetButtonIdleState();
 
                         AppState = AppState.Idle;
-                    });                 
+                    });
                 }
             }),
             CanellMergeTask.Token,
