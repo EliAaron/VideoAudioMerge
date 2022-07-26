@@ -107,9 +107,11 @@ namespace VideoAudioMerge
             AppState = AppState.Buisy;
 
             CanellMergeTask = new CancellationTokenSource();
-            
+            CancellationToken canellMergeTask = CanellMergeTask.Token;
+
             MergeTask = Task.Factory.StartNew((() =>
             {
+                bool canceled = false;
                 try
                 {
                     string fileNameVideoIn = txtVideoIn.Text;
@@ -147,7 +149,8 @@ namespace VideoAudioMerge
 
                     ffmpegProc.Start();
 
-                    while (!ffmpegProc.HasExited)
+                    while (!ffmpegProc.HasExited
+                    && !canellMergeTask.IsCancellationRequested)
                     {
                         try
                         {
@@ -162,15 +165,21 @@ namespace VideoAudioMerge
                                 });
                             }
                         }
-                        catch 
+                        catch
                         {
                             // If process exited, an error can occur while reading output.
                             // In such a case, ignore the error.
-                            if(!ffmpegProc.HasExited)
+                            if (!ffmpegProc.HasExited)
                             {
                                 throw;
                             }
                         }
+                    }
+
+                    if (!ffmpegProc.HasExited && canellMergeTask.IsCancellationRequested)
+                    {
+                        ffmpegProc.Kill();
+                        canceled = true;
                     }
 
                     ffmpegProc.WaitForExit();
@@ -184,7 +193,7 @@ namespace VideoAudioMerge
                         {
                             textVideoOut.Text = fileNameVideoOut;
                             textVideoOut.SelectionLength = txtAudioIn.Text.Length;
-                            textVideoOut.ForeColor = Color.Blue;
+                            textVideoOut.ForeColor = !canceled ? Color.Blue : Color.Red;
                             fileSystemWatcher1.Path = Path.GetDirectoryName(fileNameVideoOut);
                             fileSystemWatcher1.EnableRaisingEvents = true;
                         }
@@ -208,7 +217,7 @@ namespace VideoAudioMerge
                 {
                     this.BeginInvoke(() =>
                     {
-                        if (!CanellMergeTask.IsCancellationRequested)
+                        if (!canceled)
                         {
                             txtOutput.WriteLine("Done!");
                         }
@@ -222,7 +231,7 @@ namespace VideoAudioMerge
                     });
                 }
             }),
-            CanellMergeTask.Token,
+            canellMergeTask,
             TaskCreationOptions.None,
             TaskScheduler.Default);
         }
@@ -369,7 +378,7 @@ namespace VideoAudioMerge
 
             if (openFileDialog.ShowDialog(this) == DialogResult.OK)
             {
-                SetFileNameToTextBox(txtVideoIn ,openFileDialog.FileName);
+                SetFileNameToTextBox(txtVideoIn, openFileDialog.FileName);
             }
         }
 
@@ -397,11 +406,11 @@ namespace VideoAudioMerge
 
         private void btnCalcDiff_Click(object sender, EventArgs e)
         {
-            if(AppState == AppState.Idle)
+            if (AppState == AppState.Idle)
             {
                 Merge();
             }
-            else if(AppState == AppState.Buisy)
+            else if (AppState == AppState.Buisy)
             {
                 WaitForCommTastCanellOrEnd();
             }
@@ -420,7 +429,7 @@ namespace VideoAudioMerge
             if (textVideoOut.Text != "" && File.Exists(textVideoOut.Text))
             {
                 textVideoOut.ForeColor = Color.Blue;
-            }          
+            }
         }
 
         private void txtVideoAudioIn_DragEnter(Object sender, DragEventArgs e)
@@ -465,7 +474,7 @@ namespace VideoAudioMerge
                         {
                             SetFileNameToTextBox(txt, audioFiles[0]);
                         }
-                        else if(files.Length > 0)
+                        else if (files.Length > 0)
                         {
                             SetFileNameToTextBox(txt, files[0]);
                         }
