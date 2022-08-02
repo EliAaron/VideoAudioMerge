@@ -10,6 +10,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 
 namespace VideoAudioMerge
 {
@@ -31,6 +32,8 @@ namespace VideoAudioMerge
 
         string[] AllowedAudioFormats = { "mp3", "m4a" };
         string[] AllowedVideoFormats = { "mp4" };
+
+        static readonly Regex FFmpegOutputRegex = new Regex("frame=(\\d+) ", RegexOptions.Compiled);
 
         public VideoAudioMerge()
         {
@@ -109,45 +112,43 @@ namespace VideoAudioMerge
             CanellMergeTask = new CancellationTokenSource();
             CancellationToken canellMergeTask = CanellMergeTask.Token;
 
+            txtOutput.Clear();
+            txtOutput.ForeColor = Color.Black;
+            txtOutput.Font = new Font(txtOutput.Font, FontStyle.Regular);
+
             MergeTask = Task.Factory.StartNew((() =>
             {
                 bool canceled = false;
+                bool error = false;
+                bool progressPrinted = false;
+                Exception exception = null;
+
+                string fileNameVideoIn = txtVideoIn.Text;
+                string fileNameAudioIn = txtAudioIn.Text;
+
+                string ext = Path.GetExtension(fileNameVideoIn);
+                string path = Path.GetDirectoryName(fileNameVideoIn);
+                string fileName = Path.GetFileNameWithoutExtension(fileNameVideoIn);
+                string fileNameVideoOut = string.Format("{0}\\{1} out{2}", path, fileName, ext);
+
+                int i = 0;
+                while (File.Exists(fileNameVideoOut))
+                {
+                    i++;
+                    fileNameVideoOut = string.Format("{0}\\{1} out({2}){3}", path, fileName, i, ext);
+                }
+
                 try
                 {
-                    string fileNameVideoIn = txtVideoIn.Text;
-                    string fileNameAudioIn = txtAudioIn.Text;
+                    int frameCount = GetVideoFrameCount(fileNameVideoIn);
 
-                    string ext = Path.GetExtension(fileNameVideoIn);
-                    string path = Path.GetDirectoryName(fileNameVideoIn);
-                    string fileName = Path.GetFileNameWithoutExtension(fileNameVideoIn);
-                    string fileNameVideoOut = string.Format("{0}\\{1} out{2}", path, fileName, ext);
-
-                    int i = 0;
-                    while (File.Exists(fileNameVideoOut))
-                    {
-                        i++;
-                        fileNameVideoOut = string.Format("{0}\\{1} out({2}){3}", path, fileName, i, ext);
-                    }
-
-                    //string procFileName = "cmd";
-                    //string args = "/C \"echo y | ffmpeg -i \"video.mp4\" -i \"audio.mp3\" -map 0:v -map 1:a -codec copy -shortest \"out.mp4\"\"";
-
-                    string procFileName = "ffmpeg";
-                    string args = string.Format(
-                        "-i \"{0}\" -i \"{1}\" -map 0:v -map 1:a -codec copy -shortest \"{2}\"",
-                        fileNameVideoIn, fileNameAudioIn, fileNameVideoOut);
-
-                    Process ffmpegProc = new Process();
-
-                    ffmpegProc.StartInfo.FileName = procFileName;
-                    ffmpegProc.StartInfo.Arguments = args;
-                    ffmpegProc.StartInfo.CreateNoWindow = true;
-                    ffmpegProc.StartInfo.UseShellExecute = false;
-
-                    ffmpegProc.StartInfo.RedirectStandardOutput = true;
-                    ffmpegProc.StartInfo.RedirectStandardError = true;
-
+                    Process ffmpegProc = GetFFmpegProc(fileNameVideoIn, fileNameAudioIn, fileNameVideoOut);
                     ffmpegProc.Start();
+
+                    this.BeginInvoke(() =>
+                    {
+                        txtOutput.Text = "Merging...";
+                    });
 
                     while (!ffmpegProc.HasExited
                     && !canellMergeTask.IsCancellationRequested)
@@ -157,11 +158,16 @@ namespace VideoAudioMerge
                             // Print the output progress.
                             // The output is sent to the StandardError stream, not the StandardOutput.
                             string str = ffmpegProc.StandardError.ReadLine();
-                            if (str.StartsWith("frame="))
+                            Match match = FFmpegOutputRegex.Match(str);
+
+                            if (match.Success)
                             {
+                                int framesProcessed = int.Parse(match.Groups[1].Value);
+                                double progress = 100 * (double)framesProcessed / frameCount;
+                                progressPrinted = true;
                                 this.BeginInvoke(() =>
                                 {
-                                    txtOutput.Text = "FFmpeg output:\r\n" + str;
+                                    txtOutput.Text = $"Progress: {progress:0.0}% ({framesProcessed}/{frameCount} frames)";
                                 });
                             }
                         }
@@ -184,46 +190,71 @@ namespace VideoAudioMerge
 
                     ffmpegProc.WaitForExit();
                     ffmpegProc.Dispose();
-
-                    this.BeginInvoke(() =>
-                    {
-                        txtOutput.Clear();
-
-                        if (File.Exists(fileNameVideoOut))
-                        {
-                            textVideoOut.Text = fileNameVideoOut;
-                            textVideoOut.SelectionLength = txtAudioIn.Text.Length;
-                            textVideoOut.ForeColor = !canceled ? Color.Blue : Color.Red;
-                            fileSystemWatcher1.Path = Path.GetDirectoryName(fileNameVideoOut);
-                            fileSystemWatcher1.EnableRaisingEvents = true;
-                        }
-                    });
                 }
                 catch (Exception ex)
                 {
-                    this.BeginInvoke(() =>
-                    {
-                        txtOutput.Text = "Error";
-
-                        MessageBox.Show(
-                            this,
-                            ex.Message,
-                            "Error:",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Error);
-                    });
+                    error = true;
+                    exception = ex;
                 }
                 finally
                 {
                     this.BeginInvoke(() =>
                     {
-                        if (!canceled)
+                        if (File.Exists(fileNameVideoOut))
                         {
+                            textVideoOut.Text = fileNameVideoOut;
+                            textVideoOut.SelectionLength = txtAudioIn.Text.Length;
+                            textVideoOut.ForeColor = (!canceled && !error) ? Color.Blue : Color.Red;
+                            
+                            fileSystemWatcher1.Path = Path.GetDirectoryName(fileNameVideoOut);
+                            fileSystemWatcher1.EnableRaisingEvents = true;
+                        }
+
+                        txtOutput.Font = new Font(txtOutput.Font, FontStyle.Bold);
+
+                        if (progressPrinted)
+                        {
+                            txtOutput.WriteLine();
+                            txtOutput.WriteLine();
+                        }
+                        else
+                        {
+                            txtOutput.Clear();
+                        }
+
+                        if (!canceled && !error)
+                        {
+                            txtOutput.ForeColor = Color.Blue;
                             txtOutput.WriteLine("Done!");
                         }
                         else
                         {
-                            txtOutput.WriteLine("Canceled");
+                            txtOutput.ForeColor = Color.Red;
+
+                            if (canceled)
+                            {
+                                txtOutput.WriteLine("Canceled!");
+                            }
+
+                            if(error)
+                            {
+                                if (txtOutput.TextLength > 0)
+                                {
+                                    txtOutput.WriteLine();
+                                    txtOutput.WriteLine();
+                                }
+
+                                txtOutput.WriteLine("Error!");
+                                txtOutput.WriteLine();
+                                txtOutput.WriteLine(exception.Message);
+
+                                MessageBox.Show(
+                                    this,
+                                    exception.Message,
+                                    "Error:",
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Error);
+                            }
                         }
                         SetButtonIdleState();
 
@@ -234,6 +265,43 @@ namespace VideoAudioMerge
             canellMergeTask,
             TaskCreationOptions.None,
             TaskScheduler.Default);
+        }
+
+        private static Process GetFFmpegProc(string fileNameVideoIn, string fileNameAudioIn, string fileNameVideoOut)
+        {
+            string procFileName = "ffmpeg";
+            string args = $"-hide_banner -loglevel error -stats -stats_period 0.2 -i \"{fileNameVideoIn}\" -i \"{fileNameAudioIn}\" -map 0:v -map 1:a -codec copy -shortest \"{fileNameVideoOut}\"";
+
+            Process ffmpegProc = new Process();
+
+            ffmpegProc.StartInfo.FileName = procFileName;
+            ffmpegProc.StartInfo.Arguments = args;
+            ffmpegProc.StartInfo.CreateNoWindow = true;
+            ffmpegProc.StartInfo.UseShellExecute = false;
+
+            ffmpegProc.StartInfo.RedirectStandardOutput = true;
+            ffmpegProc.StartInfo.RedirectStandardError = true;
+            return ffmpegProc;
+        }
+
+        private static int GetVideoFrameCount(string fileNameVideoIn)
+        {
+            string procFileName = "mediainfo";
+            string args = $"--Output=\"Video;%FrameCount%\" \"{fileNameVideoIn}\"";
+
+            Process miProc = new Process();
+
+            miProc.StartInfo.FileName = procFileName;
+            miProc.StartInfo.Arguments = args;
+            miProc.StartInfo.CreateNoWindow = true;
+            miProc.StartInfo.UseShellExecute = false;
+
+            miProc.StartInfo.RedirectStandardOutput = true;
+            miProc.StartInfo.RedirectStandardError = true;
+            miProc.Start();
+            miProc.WaitForExit();
+            string str = miProc.StandardOutput.ReadLine();
+            return int.Parse(str);
         }
 
         private void WaitForCommTastCanellOrEnd()

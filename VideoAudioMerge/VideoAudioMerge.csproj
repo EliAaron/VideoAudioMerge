@@ -121,6 +121,9 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <None Include="MediaInfo.exe">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <Content Include="video_merge.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
