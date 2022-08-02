@@ -150,6 +150,7 @@ namespace VideoAudioMerge
                         txtOutput.Text = "Merging...";
                     });
 
+                    // TODO: Find a way to catch and output errors from ffmpeg
                     while (!ffmpegProc.HasExited
                     && !canellMergeTask.IsCancellationRequested)
                     {
@@ -173,6 +174,11 @@ namespace VideoAudioMerge
                     }
 
                     ffmpegProc.Dispose();
+
+                    if(!File.Exists(fileNameVideoOut))
+                    {
+                        throw new Exception("Output file was not created");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -234,7 +240,7 @@ namespace VideoAudioMerge
                                 MessageBox.Show(
                                     this,
                                     exception.Message,
-                                    "Error:",
+                                    "Merge Error",
                                     MessageBoxButtons.OK,
                                     MessageBoxIcon.Error);
                             }
@@ -312,7 +318,15 @@ namespace VideoAudioMerge
             proc.Start();
             proc.WaitForExit();
 
-            return int.Parse(proc.StandardOutput.ReadLine());
+            string output = proc.StandardOutput.ReadLine();
+            if(int.TryParse(output, out int frameCount))
+            {
+                return frameCount;
+            }
+            else
+            {
+                return -1;
+            }
         }
 
         private void WaitForCommTastCanellOrEnd()
