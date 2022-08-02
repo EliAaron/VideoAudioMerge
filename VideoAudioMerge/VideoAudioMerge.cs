@@ -319,14 +319,7 @@ namespace VideoAudioMerge
             proc.WaitForExit();
 
             string output = proc.StandardOutput.ReadLine();
-            if(int.TryParse(output, out int frameCount))
-            {
-                return frameCount;
-            }
-            else
-            {
-                return -1;
-            }
+            return int.TryParse(output, out int frameCount) ? frameCount : -1;
         }
 
         private void WaitForCommTastCanellOrEnd()
