@@ -33,7 +33,7 @@ namespace VideoAudioMerge
         string[] AllowedAudioFormats = { "mp3", "m4a" };
         string[] AllowedVideoFormats = { "mp4" };
 
-        static readonly Regex FFmpegOutputRegex = new Regex("frame=(\\d+) ", RegexOptions.Compiled);
+        static readonly Regex FFmpegOutputRegex = new Regex("frame\\s*=\\s*(\\d+)", RegexOptions.Compiled);
 
         public VideoAudioMerge()
         {
@@ -153,32 +153,9 @@ namespace VideoAudioMerge
                     while (!ffmpegProc.HasExited
                     && !canellMergeTask.IsCancellationRequested)
                     {
-                        try
+                        if(ShowProgress(ffmpegProc, frameCount))
                         {
-                            // Print the output progress.
-                            // The output is sent to the StandardError stream, not the StandardOutput.
-                            string str = ffmpegProc.StandardError.ReadLine();
-                            Match match = FFmpegOutputRegex.Match(str);
-
-                            if (match.Success)
-                            {
-                                int framesProcessed = int.Parse(match.Groups[1].Value);
-                                double progress = 100 * (double)framesProcessed / frameCount;
-                                progressPrinted = true;
-                                this.BeginInvoke(() =>
-                                {
-                                    txtOutput.Text = $"Progress: {progress:0.0}% ({framesProcessed}/{frameCount} frames)";
-                                });
-                            }
-                        }
-                        catch
-                        {
-                            // If process exited, an error can occur while reading output.
-                            // In such a case, ignore the error.
-                            if (!ffmpegProc.HasExited)
-                            {
-                                throw;
-                            }
+                            progressPrinted = true;
                         }
                     }
 
@@ -189,6 +166,12 @@ namespace VideoAudioMerge
                     }
 
                     ffmpegProc.WaitForExit();
+
+                    if (ShowProgress(ffmpegProc, frameCount))
+                    {
+                        progressPrinted = true;
+                    }
+
                     ffmpegProc.Dispose();
                 }
                 catch (Exception ex)
@@ -265,6 +248,42 @@ namespace VideoAudioMerge
             canellMergeTask,
             TaskCreationOptions.None,
             TaskScheduler.Default);
+        }
+
+        private bool ShowProgress(Process ffmpegProc, int frameCount)
+        {
+            try
+            {
+                // Print the output progress.
+                // The output is sent to the StandardError stream, not the StandardOutput.
+
+                string str = ffmpegProc.StandardError.ReadLine();
+                if (str == null) return false;
+
+                Match match = FFmpegOutputRegex.Match(str);
+                if (!match.Success) return false;
+
+                int framesProcessed = int.Parse(match.Groups[1].Value);
+                double progress = 100 * (double)framesProcessed / frameCount;
+                
+                this.BeginInvoke(() =>
+                {
+                    txtOutput.Text = $"Progress: {progress:0.0}% ({framesProcessed}/{frameCount} frames)";
+                });
+
+                return true;
+            }
+            catch
+            {
+                // If process exited, an error can occur while reading output.
+                // In such a case, ignore the error.
+                if (!ffmpegProc.HasExited)
+                {
+                    throw;
+                }
+            }
+
+            return false;
         }
 
         private static Process GetFFmpegProc(string fileNameVideoIn, string fileNameAudioIn, string fileNameVideoOut)
