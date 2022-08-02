@@ -269,39 +269,31 @@ namespace VideoAudioMerge
 
         private static Process GetFFmpegProc(string fileNameVideoIn, string fileNameAudioIn, string fileNameVideoOut)
         {
-            string procFileName = "ffmpeg";
-            string args = $"-hide_banner -loglevel error -stats -stats_period 0.2 -i \"{fileNameVideoIn}\" -i \"{fileNameAudioIn}\" -map 0:v -map 1:a -codec copy -shortest \"{fileNameVideoOut}\"";
+            Process proc = new Process();
+            proc.StartInfo.FileName = "ffmpeg";
+            proc.StartInfo.Arguments = $"-hide_banner -loglevel error -stats -stats_period 0.2 -i \"{fileNameVideoIn}\" -i \"{fileNameAudioIn}\" -map 0:v -map 1:a -codec copy -shortest \"{fileNameVideoOut}\"";
+            proc.StartInfo.CreateNoWindow = true;
+            proc.StartInfo.UseShellExecute = false;
+            proc.StartInfo.RedirectStandardOutput = true;
+            proc.StartInfo.RedirectStandardError = true;
 
-            Process ffmpegProc = new Process();
-
-            ffmpegProc.StartInfo.FileName = procFileName;
-            ffmpegProc.StartInfo.Arguments = args;
-            ffmpegProc.StartInfo.CreateNoWindow = true;
-            ffmpegProc.StartInfo.UseShellExecute = false;
-
-            ffmpegProc.StartInfo.RedirectStandardOutput = true;
-            ffmpegProc.StartInfo.RedirectStandardError = true;
-            return ffmpegProc;
+            return proc;
         }
 
-        private static int GetVideoFrameCount(string fileNameVideoIn)
+        private static int GetVideoFrameCount(string videoFileName)
         {
-            string procFileName = "mediainfo";
-            string args = $"--Output=\"Video;%FrameCount%\" \"{fileNameVideoIn}\"";
+            Process proc = new Process();
+            proc.StartInfo.FileName = "mediainfo";
+            proc.StartInfo.Arguments = $"--Output=\"Video;%FrameCount%\" \"{videoFileName}\"";
+            proc.StartInfo.CreateNoWindow = true;
+            proc.StartInfo.UseShellExecute = false;
+            proc.StartInfo.RedirectStandardOutput = true;
+            proc.StartInfo.RedirectStandardError = true;
 
-            Process miProc = new Process();
+            proc.Start();
+            proc.WaitForExit();
 
-            miProc.StartInfo.FileName = procFileName;
-            miProc.StartInfo.Arguments = args;
-            miProc.StartInfo.CreateNoWindow = true;
-            miProc.StartInfo.UseShellExecute = false;
-
-            miProc.StartInfo.RedirectStandardOutput = true;
-            miProc.StartInfo.RedirectStandardError = true;
-            miProc.Start();
-            miProc.WaitForExit();
-            string str = miProc.StandardOutput.ReadLine();
-            return int.Parse(str);
+            return int.Parse(proc.StandardOutput.ReadLine());
         }
 
         private void WaitForCommTastCanellOrEnd()
